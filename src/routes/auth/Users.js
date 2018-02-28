@@ -1,13 +1,168 @@
 import React, { PureComponent } from 'react';
 import { connect } from 'dva';
-import { Row, Col, Card, Form, Input, Icon, Button, Dropdown, Menu, Modal } from 'antd';
-import StandardTable from '../../components/page/auth/users/List/index';
+import { Row, Col, Card, Form, Input, Icon, Button, Dropdown, Menu, Modal, Divider } from 'antd';
+import StandardTable from '../../components/StandardTable';
 import PageHeaderLayout from './../../layouts/PageHeaderLayout';
 
 import styles from './Users.less';
 
 const FormItem = Form.Item;
 const getValue = obj => Object.keys(obj).map(key => obj[key]).join(',');
+
+// 重置密码弹框
+const ResetPwdModal = Form.create()((props) => {
+  const { visible, form, onCancel, onOk } = props;
+
+  return (
+    <Modal
+      title="重置密码"
+      visible={visible}
+      onOk={(e) => {
+        e.preventDefault();
+
+        form.validateFields((err, fieldsValue) => {
+          if (err) return;
+          onOk(fieldsValue);
+        });
+        form.resetFields();
+      }}
+      onCancel={() => {
+        onCancel();
+        form.resetFields();
+      }}
+    >
+      <FormItem
+        labelCol={{ span: 5 }}
+        wrapperCol={{ span: 15 }}
+        label="密码"
+      >
+        {form.getFieldDecorator('user_password', {
+          rules: [
+            { required: true, message: '请输入密码' },
+            { min: 6, message: '请输入6-18位密码' },
+            { max: 18, message: '请输入6-18位密码' },
+          ],
+        })(
+          <Input type="password" placeholder="请输入" />
+        )}
+      </FormItem>
+    </Modal>
+  );
+});
+
+// 添加or编辑弹框
+const EditModal = connect(state => ({
+  users: state.users,
+}))(Form.create()((props) => {
+  const { visible, onOk, onCancel, form, isEdit, users: { userInfo: data } } = props;
+
+  return (
+    <Modal
+      title={isEdit ? '编辑用户' : '添加用户'}
+      visible={visible}
+      onOk={(e) => {
+        e.preventDefault();
+
+        if (data.id) {
+          form.setFieldsValue({
+            user_password: '0',
+          });
+        }
+
+        form.validateFields((err, fieldsValue) => {
+          if (err) return;
+          if (isEdit) {
+            onOk({
+              id: data.id,
+              ...fieldsValue,
+            }, form.resetFields);
+          } else {
+            onOk(fieldsValue, form.resetFields);
+          }
+        });
+      }}
+      onCancel={() => {
+        onCancel();
+        form.resetFields();
+      }}
+    >
+      <Form>
+        <FormItem
+          labelCol={{ span: 5 }}
+          wrapperCol={{ span: 15 }}
+          label="登录名"
+        >
+          {form.getFieldDecorator('user_account', {
+            initialValue: data.user_account,
+            rules: [
+              { required: true, message: '该项为必填项' },
+            ],
+          })(
+            <Input placeholder="请输入" />
+          )}
+        </FormItem>
+        <FormItem
+          labelCol={{ span: 5 }}
+          wrapperCol={{ span: 15 }}
+          label="真实姓名"
+        >
+          {form.getFieldDecorator('user_name', {
+            initialValue: data.user_name,
+            rules: [
+              { required: true, message: '该项为必填项' },
+            ],
+          })(
+            <Input placeholder="请输入" />
+          )}
+        </FormItem>
+        <FormItem
+          labelCol={{ span: 5 }}
+          wrapperCol={{ span: 15 }}
+          label="邮箱"
+        >
+          {form.getFieldDecorator('user_email', {
+            initialValue: data.user_email,
+            rules: [
+              { required: true, message: '该项为必填项' },
+            ],
+          })(
+            <Input placeholder="请输入" />
+          )}
+        </FormItem>
+        <FormItem
+          labelCol={{ span: 5 }}
+          wrapperCol={{ span: 15 }}
+          label="手机号"
+        >
+          {form.getFieldDecorator('user_mobile', {
+            initialValue: data.user_mobile,
+            rules: [
+              { required: true, message: '该项为必填项' },
+            ],
+          })(
+            <Input placeholder="请输入" />
+          )}
+        </FormItem>
+        {!isEdit ? (
+          <FormItem
+            labelCol={{ span: 5 }}
+            wrapperCol={{ span: 15 }}
+            label="密码"
+          >
+            {form.getFieldDecorator('user_password', {
+              initialValue: data.user_password,
+              rules: [
+                { required: true, message: '该项为必填项' },
+              ],
+            })(
+              <Input type="password" placeholder="请输入" />
+            )}
+          </FormItem>
+        ) : ''}
+      </Form>
+    </Modal>
+  );
+}));
 
 @connect(state => ({
   users: state.users,
@@ -19,31 +174,28 @@ export default class TableList extends PureComponent {
     selectedRows: [],
     formQuery: {},
     resetPwdModal: {
-      visible: false,
-      form: {
+      isVisible: false,
+      data: {
+        id: '',
         user_password: '',
       },
     },
     editModal: {
-      visible: false,
-      form: {
-        user_id: '',
-        user_account: '',
-        user_name: '',
-        user_email: '',
-        user_mobile: '',
-        user_password: '',
-      },
+      isVisible: false,
+      isEdit: false,
     },
   };
 
   componentDidMount() {
     const { dispatch } = this.props;
+
+    // 获取列表数据
     dispatch({
       type: 'users/fetch',
     });
   }
 
+  // 分页、排序、筛选变化时触发
   handleStandardTableChange = (pagination, filtersArg, sorter) => {
     const { dispatch } = this.props;
     const { formQuery } = this.state;
@@ -70,24 +222,7 @@ export default class TableList extends PureComponent {
     });
   }
 
-  handleFormReset = () => {
-    const { form, dispatch } = this.props;
-    form.resetFields();
-    this.setState({
-      formQuery: {},
-    });
-    dispatch({
-      type: 'users/fetch',
-      payload: {},
-    });
-  }
-
-  toggleForm = () => {
-    this.setState({
-      expandForm: !this.state.expandForm,
-    });
-  }
-
+  // 批量操作-更多按钮
   handleMenuClick = (e) => {
     const { dispatch } = this.props;
     const { selectedRows } = this.state;
@@ -113,12 +248,14 @@ export default class TableList extends PureComponent {
     }
   }
 
+  // 选择当行数据
   handleSelectRows = (rows) => {
     this.setState({
       selectedRows: rows,
     });
   }
 
+  // 根据查询条件搜索
   handleSearch = (e) => {
     e.preventDefault();
 
@@ -127,69 +264,147 @@ export default class TableList extends PureComponent {
     form.validateFields((err, fieldsValue) => {
       if (err) return;
 
-      const values = {
-        ...fieldsValue,
-        updatedAt: fieldsValue.updatedAt && fieldsValue.updatedAt.valueOf(),
-      };
-
       this.setState({
-        formQuery: values,
+        formQuery: fieldsValue,
       });
 
       dispatch({
         type: 'users/fetch',
-        payload: values,
+        payload: fieldsValue,
       });
     });
   }
 
-  handleEditVisible = (flag) => {
-    this.setState(Object.assign(this.state.editModal, {
-      visible: !!flag,
-    }));
+  // 显示or隐藏编辑用户信息弹框
+  handleEditVisible = (flag, id = '') => {
+    const { dispatch } = this.props;
+
+    if (flag) {
+      // 根据有没有传id判断是否是编辑弹窗
+      if (id) {
+        dispatch({
+          type: 'users/getUserInfo',
+          payload: {
+            id,
+          },
+        });
+        this.setState(Object.assign(this.state.editModal, {
+          isEdit: true,
+          isVisible: true,
+        }));
+      } else {
+        this.setState(Object.assign(this.state.editModal, {
+          isEdit: false,
+          isVisible: true,
+        }));
+      }
+      this.setState(Object.assign(this.state.editModal, {
+        isVisible: true,
+      }));
+    } else {
+      this.setState(Object.assign(this.state.editModal, {
+        isEdit: false,
+        isVisible: false,
+      }));
+      dispatch({
+        type: 'users/resetUserInfo',
+      });
+    }
   }
 
-  handleResetPwdVisible = (flag) => {
+  // 显示or隐藏重置密码弹框
+  handleResetPwdVisible = (flag, id = '') => {
     this.setState(Object.assign(this.state.resetPwdModal, {
-      visible: !!flag,
+      isVisible: flag,
     }));
-    this.props.form.resetFields();
-  }
-
-  // resetPwdModal
-
-  handleEditInput = (e, key) => {
-    this.setState(Object.assign(this.state.editModal.form, {
-      [key]: e.target.value,
+    this.setState(Object.assign(this.state.resetPwdModal.data, {
+      id,
     }));
   }
 
-  handleEditSubmit = () => {
-    console.log(this.state.editModal.form);
+  // 添加or编辑用户信息
+  handleEditSubmit = (fieldsValue, resetFormCallBack) => {
+    const { editModal: { isEdit } } = this.state;
+    const { dispatch } = this.props;
+    if (isEdit) {
+      dispatch({
+        type: 'users/editUserInfo',
+        payload: fieldsValue,
+        callback: resetFormCallBack,
+      });
+
+      this.setState(Object.assign(this.state.editModal, {
+        isVisible: false,
+      }));
+    } else {
+      dispatch({
+        type: 'users/addUserInfo',
+        payload: fieldsValue,
+        callback: resetFormCallBack,
+      });
+
+      this.setState(Object.assign(this.state.editModal, {
+        isVisible: false,
+      }));
+    }
   }
 
-  handleResetPwdSubmit = () => {
-    this.props.form.validateFields((err, fieldsValue) => {
-      if (err) return;
-      console.log(`添加成功${fieldsValue}`);
+  // 重置密码
+  handleResetPwdSubmit = (fieldsValue) => {
+    const { dispatch } = this.props;
+
+    dispatch({
+      type: 'users/resetPwd',
+      payload: {
+        id: this.state.resetPwdModal.data.id,
+        ...fieldsValue,
+      },
+    });
+
+    this.setState(Object.assign(this.state.resetPwdModal, {
+      isVisible: false,
+    }));
+  }
+
+  // 删除项目
+  handleRemove = (id) => {
+    const { dispatch } = this.props;
+
+    dispatch({
+      type: 'users/remove',
+      payload: {
+        id,
+      },
+      callback: () => {
+        this.setState({
+          selectedRows: [],
+        });
+      },
     });
   }
 
-  // handleAdd = () => {
-  //   this.props.dispatch({
-  //     type: 'rule/add',
-  //     payload: {
-  //       description: this.state.addInputValue,
-  //     },
-  //   });
+  // 重置查询条件
+  handleFormReset = () => {
+    const { form, dispatch } = this.props;
+    form.resetFields();
+    this.setState({
+      formQuery: {},
+    });
+    dispatch({
+      type: 'users/fetch',
+      payload: {},
+    });
+  }
 
-  //   message.success('添加成功');
-  //   this.setState({
-  //     modalVisible: false,
-  //   });
-  // }
+  // 切换搜索条件的展示方式
+  toggleForm = () => {
+    this.setState({
+      expandForm: !this.state.expandForm,
+    });
+  }
 
-  renderSimpleForm() {
+  // 搜索条件的展示方式———收起
+  renderSimpleForm = () => {
     const { getFieldDecorator } = this.props.form;
     return (
       <Form onSubmit={this.handleSearch} layout="inline">
@@ -222,7 +437,8 @@ export default class TableList extends PureComponent {
     );
   }
 
-  renderAdvancedForm() {
+  // 搜索条件的展示方式———展开
+  renderAdvancedForm = () => {
     const { getFieldDecorator } = this.props.form;
     return (
       <Form onSubmit={this.handleSearch} layout="inline">
@@ -271,7 +487,8 @@ export default class TableList extends PureComponent {
     );
   }
 
-  renderForm() {
+  // 选择搜索条件的展示方式
+  renderForm = () => {
     return this.state.expandForm ? this.renderAdvancedForm() : this.renderSimpleForm();
   }
 
@@ -285,7 +502,57 @@ export default class TableList extends PureComponent {
       </Menu>
     );
 
-    const formEdit = editModal.form;
+    const columns = [
+      {
+        title: '序号',
+        render(text, record, index) {
+          return index + 1;
+        },
+      },
+      {
+        title: '用户名',
+        dataIndex: 'user_account',
+      },
+      {
+        title: '真实姓名',
+        dataIndex: 'user_name',
+      },
+      {
+        title: '手机号',
+        dataIndex: 'user_mobile',
+      },
+      {
+        title: '邮箱',
+        dataIndex: 'user_email',
+      },
+      {
+        title: '操作',
+        render: (text, record) => (
+          <div>
+            <a
+              onClick={() => {
+                this.handleResetPwdVisible(true, record.id);
+              }}
+            >重置密码
+            </a>
+            <Divider type="vertical" />
+            <a
+              onClick={() => {
+                this.handleEditVisible(true, record.id);
+              }}
+            >修改
+            </a>
+            <Divider type="vertical" />
+            <a
+              onClick={() => {
+                this.handleRemove(record.id);
+              }}
+            >删除
+            </a>
+          </div>
+        ),
+      },
+    ];
 
     return (
       <PageHeaderLayout title="用户管理">
@@ -315,111 +582,23 @@ export default class TableList extends PureComponent {
               selectedRows={selectedRows}
               loading={ruleLoading}
               data={data}
+              columns={columns}
               onSelectRow={this.handleSelectRows}
-              onResetPwdVisible={this.handleResetPwdVisible}
               onChange={this.handleStandardTableChange}
             />
           </div>
         </Card>
-        <Modal
-          title="添加用户"
-          visible={editModal.visible}
-          onOk={this.handleEditSubmit}
-          onCancel={() => this.handleEditVisible()}
-        >
-          <Form>
-            <FormItem
-              labelCol={{ span: 5 }}
-              wrapperCol={{ span: 15 }}
-              label="登录名"
-            >
-              <Input
-                placeholder="请输入"
-                onChange={(e) => {
-                  this.handleEditInput(e, 'user_account');
-                }}
-                value={formEdit.user_account}
-              />
-            </FormItem>
-            <FormItem
-              labelCol={{ span: 5 }}
-              wrapperCol={{ span: 15 }}
-              label="真实姓名"
-            >
-              <Input
-                placeholder="请输入"
-                onChange={(e) => {
-                  this.handleEditInput(e, 'user_name');
-                }}
-                value={formEdit.user_name}
-              />
-            </FormItem>
-            <FormItem
-              labelCol={{ span: 5 }}
-              wrapperCol={{ span: 15 }}
-              label="邮箱"
-            >
-              <Input
-                type="email"
-                placeholder="请输入"
-                onChange={(e) => {
-                  this.handleEditInput(e, 'user_email');
-                }}
-                value={formEdit.user_email}
-              />
-            </FormItem>
-            <FormItem
-              labelCol={{ span: 5 }}
-              wrapperCol={{ span: 15 }}
-              label="手机号"
-            >
-              <Input
-                type="tel"
-                placeholder="请输入"
-                onChange={(e) => {
-                  this.handleEditInput(e, 'user_mobile');
-                }}
-                value={formEdit.user_mobile}
-              />
-            </FormItem>
-            <FormItem
-              labelCol={{ span: 5 }}
-              wrapperCol={{ span: 15 }}
-              label="密码"
-            >
-              <Input
-                type="password"
-                placeholder="请输入"
-                onChange={(e) => {
-                  this.handleEditInput(e, 'user_password');
-                }}
-                value={formEdit.user_password}
-              />
-            </FormItem>
-          </Form>
-        </Modal>
-        <Modal
-          title="重置密码"
-          visible={resetPwdModal.visible}
+        <ResetPwdModal
+          visible={resetPwdModal.isVisible}
           onOk={this.handleResetPwdSubmit}
           onCancel={() => this.handleResetPwdVisible()}
-        >
-          <FormItem
-            labelCol={{ span: 5 }}
-            wrapperCol={{ span: 15 }}
-            label="密码"
-          >
-            {this.props.form.getFieldDecorator('password', {
-              rules: [
-                { required: true, message: '请输入密码' },
-                { min: 6, message: '请输入6-18位密码' },
-                { max: 18, message: '请输入6-18位密码' },
-              ],
-            })(
-              <Input type="password" placeholder="请输入" />
-            )}
-          </FormItem>
-        </Modal>
+        />
+        <EditModal
+          visible={editModal.isVisible}
+          isEdit={editModal.isEdit}
+          onOk={this.handleEditSubmit}
+          onCancel={() => this.handleEditVisible()}
+        />
       </PageHeaderLayout>
     );
   }

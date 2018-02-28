@@ -8,13 +8,32 @@ import { getNotices } from './mock/demo/notices';
 import { format, delay } from 'roadhog-api-doc';
 
 import users from './mock/auth/users';
+import { resultSuccess, resultRandom } from './mock/rule';
 
 // 是否禁用代理
 const noProxy = process.env.NO_PROXY === 'true';
 
 // 代码中会兼容本地 service mock 以及部署站点的静态数据
 const proxy = {
+  'GET /nodeApi/auth/users/:id/edit': mockjs.mock({
+    code: '0',
+    msg: 'ok',
+    result: {
+      'id|1-1000': 95,
+      user_account: '@last',
+      user_name: '@cname',
+      'user_sex|18-60': 1,
+      user_mobile: '',
+      user_email: '@email',
+      remark: '@cword',
+    }
+  }),
   'GET /nodeApi/auth/users': users.getList,
+  'PUT /nodeApi/auth/usersPwd/:id': resultSuccess,
+  'PUT /nodeApi/auth/users/:id': resultSuccess,
+  'DELETE /nodeApi/auth/users/:id': resultRandom,
+  'POST /nodeApi/auth/users': resultSuccess,
+  'DELETE /nodeApi/auth/users': resultRandom,
 };
 
 const demoProxy = {
@@ -75,21 +94,21 @@ const demoProxy = {
   'GET /api/profile/advanced': getProfileAdvancedData,
   'POST /api/login/account': (req, res) => {
     const { password, userName, type } = req.body;
-    if(password === '888888' && userName === 'admin'){
+    if (password === '888888' && userName === 'admin') {
       res.send({
         status: 'ok',
         type,
         currentAuthority: 'admin'
       });
-      return ;
+      return;
     }
-    if(password === '123456' && userName === 'user'){
+    if (password === '123456' && userName === 'user') {
       res.send({
         status: 'ok',
         type,
         currentAuthority: 'user'
       });
-      return ;
+      return;
     }
     res.send({
       status: 'error',
